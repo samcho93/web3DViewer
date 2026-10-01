@@ -47,7 +47,9 @@ npm run dev      # http://localhost:5173
 npm run build    # dist/ 에 정적 파일 생성
 ```
 
-`dist/`는 정적 호스팅(GitHub Pages, Nginx 등)에 그대로 올리면 됩니다.
+`dist/`는 정적 호스팅(Nginx 등)에 그대로 올리면 됩니다. 저장소 루트의 소스를 그대로 서비스하면 빌드되지 않은 `/src/main.js`를 불러오게 되어 화면이 깨지므로, 반드시 빌드 결과물을 배포하세요.
+
+**GitHub Pages**: `npm run deploy`를 실행하면 빌드 후 `gh-pages` 브랜치로 푸시합니다. 저장소 Settings → Pages → Source를 *Deploy from a branch*, `gh-pages` / `(root)`로 설정하세요.
 `?url=<파일 주소>` 파라미터로 원격 파일을 바로 열 수 있습니다. 이때 해당 서버가 CORS를 허용해야 합니다.
 
 ### 마우스 / 단축키
