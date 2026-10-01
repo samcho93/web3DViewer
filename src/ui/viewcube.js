@@ -28,6 +28,7 @@ export class ViewCube {
     this.viewer = viewer;
     this.scene = new THREE.Scene();
     this.camera = new THREE.OrthographicCamera(-0.95, 0.95, 0.95, -0.95, 0.1, 10);
+    viewer.patchProjection(this.camera, () => 1);
     this.targets = [];
     this.hovered = null;
     this.visible = true;

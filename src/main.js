@@ -63,6 +63,7 @@ sep();
 addBtn('fit', 'fit', '', '전체 보기 (F)', () => viewer.fit(true), { req: 'any' });
 addBtn('views', 'cube', '뷰', '표준 뷰', (e, b) => showMenu(b, VIEW_ITEMS.map(([k, l, kb]) => ({ label: l, kbd: kb, action: () => viewer.setView(k) }))), { caret: true, req: '3d' });
 addBtn('proj', 'persp', '', '원근 / 직교 투영 전환 (P)', () => toggleProjection(), { req: '3d' });
+addBtn('viewEdit', 'viewEdit', '뷰 편집', '뷰 편집: 화면 회전 / 반전 (V)', () => togglePanel('viewEditPanel'), { req: 'any' });
 sep();
 addBtn('render', 'shaded', '표시', '표시 모드', (e, b) => showMenu(b, RENDER_MODES.map(([k, l]) => ({ label: l, checked: viewer.renderMode === k, action: () => setRenderMode(k) }))), { caret: true, req: '3d' });
 addBtn('grid', 'grid', '', '그리드 (G)', () => toggleGrid(), { req: '3d' });
@@ -98,6 +99,7 @@ function updateToolbar() {
   tb.measure.classList.toggle('active', !$('measurePanel').classList.contains('hidden'));
   tb.section.classList.toggle('active', !$('sectionPanel').classList.contains('hidden'));
   tb.explode.classList.toggle('active', !$('explodePanel').classList.contains('hidden'));
+  tb.viewEdit.classList.toggle('active', !$('viewEditPanel').classList.contains('hidden') || viewer.hasViewXform);
   tb.panelL.classList.toggle('active', state.leftOpen);
   tb.panelR.classList.toggle('active', state.rightOpen);
   tb.pick.querySelector('.lbl').textContent = viewer.pickLevel === 'part' ? '부품' : '어셈블리';
@@ -449,7 +451,7 @@ function togglePanel(id) {
   updateToolbar();
 }
 function closeFloatPanels() {
-  for (const id of ['measurePanel', 'sectionPanel', 'explodePanel']) $(id).classList.add('hidden');
+  for (const id of ['measurePanel', 'sectionPanel', 'explodePanel', 'viewEditPanel']) $(id).classList.add('hidden');
   measure.setMode(null);
   syncMeasureModes();
 }
@@ -527,6 +529,43 @@ function renderSectionPanel() {
     renderSectionPanel();
   });
 }
+
+// ---- view edit (rotate / flip)
+const VE_ICONS = { ccw: ['rotCCW', '90°'], cw: ['rotCW', '90°'], flipH: ['flipH', '좌우'], flipV: ['flipV', '상하'] };
+document.querySelectorAll('[data-ve]').forEach((b) => {
+  const ic = VE_ICONS[b.dataset.ve];
+  if (ic) b.innerHTML = icon(ic[0], 14) + ' ' + ic[1];
+  b.addEventListener('click', () => {
+    const a = b.dataset.ve;
+    if (a === 'ccw') viewer.rotateView(90);
+    else if (a === 'cw') viewer.rotateView(-90);
+    else if (a === 'r180') viewer.rotateView(180);
+    else if (a === 'flipH') viewer.flipView('h');
+    else if (a === 'flipV') viewer.flipView('v');
+    else if (a === 'reset') viewer.resetViewTransform();
+  });
+});
+$('rollRange').addEventListener('input', (e) => viewer.setViewTransform({ roll: THREE.MathUtils.degToRad(-e.target.value) }));
+document.querySelectorAll('[data-rot]').forEach((b) => b.addEventListener('click', () => {
+  const a = b.dataset.rot;
+  if (a === 'yup') viewer.rotateModel('x', 90);
+  else viewer.rotateModel(a, 90);
+  modelSummaryCache = null;
+  renderProps();
+  viewer.fit(true);
+}));
+function syncViewEdit() {
+  const v = viewer.viewXform;
+  const deg = Math.round(-THREE.MathUtils.radToDeg(v.roll));
+  $('rollRange').value = deg;
+  $('rollVal').textContent = `${deg}°${v.flipH ? ' · 좌우반전' : ''}${v.flipV ? ' · 상하반전' : ''}`;
+  document.querySelector('[data-ve=flipH]').classList.toggle('active', v.flipH);
+  document.querySelector('[data-ve=flipV]').classList.toggle('active', v.flipV);
+  $('modelOrient').classList.toggle('hidden', viewer.mode !== '3d');
+  updateToolbar();
+}
+viewer.addEventListener('viewxform', syncViewEdit);
+viewer.addEventListener('model', syncViewEdit);
 
 // ---- explode
 $('explodeRange').addEventListener('input', (e) => {
@@ -899,6 +938,12 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (k === 'enter' && measure.mode) return measure.complete();
+  if (viewer.mode !== 'empty') {
+    if (e.key === '[') return viewer.rotateView(90);
+    if (e.key === ']') return viewer.rotateView(-90);
+    if (e.shiftKey && k === 'h') return viewer.flipView('h');
+    if (e.shiftKey && k === 'v') return viewer.flipView('v');
+  }
   if (k === '?' || k === 'f1') { e.preventDefault(); return showHelp(); }
   if (viewer.mode === 'empty') return;
   const viewKeys = { 1: 'front', 2: 'back', 3: 'left', 4: 'right', 5: 'top', 6: 'bottom', 7: 'iso' };
@@ -909,6 +954,7 @@ window.addEventListener('keydown', (e) => {
     case 'i': if (viewer.mode === '3d') isolateSelection(); break;
     case 'a': viewer.showAll(); layers.refresh(); break;
     case 'm': togglePanel('measurePanel'); break;
+    case 'v': togglePanel('viewEditPanel'); break;
     case 's': if (viewer.mode === '3d') togglePanel('sectionPanel'); break;
     case 'e': if (viewer.mode === '3d') togglePanel('explodePanel'); break;
     case 't': if (viewer.mode === '3d') { showExplodePanel(); startMove('translate'); } break;
@@ -961,6 +1007,9 @@ function showHelp() {
           <tr><td><kbd>S</kbd></td><td>단면</td></tr>
           <tr><td><kbd>E</kbd></td><td>분해 패널</td></tr>
           <tr><td><kbd>T</kbd> / <kbd>R</kbd></td><td>선택 요소 이동 / 회전 (분리)</td></tr>
+          <tr><td><kbd>V</kbd></td><td>뷰 편집 패널</td></tr>
+          <tr><td><kbd>[</kbd> / <kbd>]</kbd></td><td>화면 90° 회전 (반시계 / 시계)</td></tr>
+          <tr><td><kbd>Shift</kbd>+<kbd>H</kbd> / <kbd>V</kbd></td><td>좌우 / 상하 반전</td></tr>
           <tr><td><kbd>Esc</kbd></td><td>취소 / 선택 해제</td></tr>
           <tr><td><kbd>Ctrl</kbd>+<kbd>O</kbd></td><td>파일 열기</td></tr>
         </table>

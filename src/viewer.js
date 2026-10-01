@@ -50,6 +50,12 @@ export class Viewer extends EventTarget {
     renderer.toneMapping = THREE.NeutralToneMapping;
     renderer.localClippingEnabled = true;
     renderer.autoClear = false;
+    // A mirrored view (flip) reverses triangle winding on screen; invert the
+    // front-face test so culling and two-sided lighting stay correct.
+    const glState = renderer.state;
+    const setMaterial = glState.setMaterial.bind(glState);
+    glState.setMaterial = (material, frontFaceCW) => setMaterial(material, this.isMirrored ? !frontFaceCW : frontFaceCW);
+    this.viewXform = { roll: 0, flipH: false, flipV: false };
     container.appendChild(renderer.domElement);
     this.renderer = renderer;
 
@@ -89,6 +95,7 @@ export class Viewer extends EventTarget {
       c.position.set(100, -100, 100);
       c.add(this.headlight.clone());
       scene.add(c);
+      this.patchProjection(c, () => (this.container.clientWidth || 1) / (this.container.clientHeight || 1));
     }
     this.camera = this.perspCam;
 
@@ -146,6 +153,15 @@ export class Viewer extends EventTarget {
     c.minDistance = 0;
     c.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN };
     c.addEventListener('change', () => this.requestRender());
+    // with a rotated/flipped view, drags are mapped back so the scene follows the cursor
+    for (const name of ['_handleMouseDownRotate', '_handleMouseMoveRotate', '_handleMouseDownPan', '_handleMouseMovePan']) {
+      const orig = c[name].bind(c);
+      c[name] = (e) => {
+        if (!this.hasViewXform) return orig(e);
+        const p = this.mapClient(e.clientX, e.clientY);
+        return orig({ clientX: p.x, clientY: p.y, pageX: p.x, pageY: p.y, pointerId: e.pointerId, pointerType: e.pointerType, button: e.button });
+      };
+    }
     if (this.controls) {
       c.target.copy(this.controls.target);
       c.enableRotate = this.controls.enableRotate;
@@ -388,7 +404,7 @@ export class Viewer extends EventTarget {
     if (cam.isPerspectiveCamera) {
       const fov = THREE.MathUtils.degToRad(cam.fov);
       const fitH = radius / Math.sin(fov / 2);
-      const fitW = radius / Math.sin(Math.atan(Math.tan(fov / 2) * cam.aspect));
+      const fitW = radius / Math.sin(Math.atan(Math.tan(fov / 2) * Math.min(cam.aspect, 1 / cam.aspect)));
       pos = center.clone().add(dir.multiplyScalar(Math.max(fitH, fitW) * 1.05));
     } else {
       const aspect = (this.container.clientWidth || 1) / (this.container.clientHeight || 1);
@@ -396,7 +412,10 @@ export class Viewer extends EventTarget {
       if (this.mode === '2d') {
         // tighter fit for flat drawings
         const s = box.getSize(new THREE.Vector3());
-        halfH = Math.max(s.y / 2, s.x / 2 / aspect) * 1.08 || 1;
+        // fit the drawing's extents as they appear on screen (after view rotation)
+        const c = Math.abs(Math.cos(this.viewXform.roll)), sn = Math.abs(Math.sin(this.viewXform.roll));
+        const sw = s.x * c + s.y * sn, sh = s.x * sn + s.y * c;
+        halfH = Math.max(sh / 2, sw / 2 / aspect) * 1.08 || 1;
       }
       const curHalf = (cam.top - cam.bottom) / 2;
       zoom = curHalf / halfH;
@@ -912,6 +931,100 @@ export class Viewer extends EventTarget {
     this.scene.background = prevBg;
     this.requestRender();
     return url;
+  }
+
+  // ================================================================ view transform (rotate / flip)
+  get hasViewXform() {
+    const v = this.viewXform;
+    return v.flipH || v.flipV || Math.abs(Math.sin(v.roll)) > 1e-9 || Math.cos(v.roll) < 0;
+  }
+
+  get isMirrored() {
+    return this.viewXform.flipH !== this.viewXform.flipV;
+  }
+
+  /** 2x2 screen transform T = R(roll) * diag(fx, fy) (y up) */
+  screenT() {
+    const { roll, flipH, flipV } = this.viewXform;
+    const c = Math.cos(roll), s = Math.sin(roll), fx = flipH ? -1 : 1, fy = flipV ? -1 : 1;
+    return [c * fx, -s * fy, s * fx, c * fy]; // row-major [a b; c d]
+  }
+
+  /** premultiplies the projection with the screen transform (expressed in NDC) */
+  patchProjection(cam, aspectFn) {
+    const base = cam.updateProjectionMatrix;
+    const S = new THREE.Matrix4();
+    cam.updateProjectionMatrix = () => {
+      base.call(cam);
+      if (!this.viewXform || !this.hasViewXform) return;
+      const a = aspectFn();
+      const [t00, t01, t10, t11] = this.screenT();
+      // NDC: S = D^-1 T D with D = diag(aspect, 1)
+      S.set(t00, t01 / a, 0, 0, t10 * a, t11, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+      cam.projectionMatrix.premultiply(S);
+      cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert();
+    };
+  }
+
+  /** maps a client point through the inverse screen transform (about the canvas centre) */
+  mapClient(x, y) {
+    const r = this.renderer.domElement.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const [a, b, c, d] = this.screenT();
+    const det = a * d - b * c;
+    const rx = x - cx, ry = cy - y;
+    const vx = (d * rx - b * ry) / det, vy = (-c * rx + a * ry) / det;
+    return { x: cx + vx, y: cy - vy };
+  }
+
+  setViewTransform(opts) {
+    Object.assign(this.viewXform, opts);
+    const v = this.viewXform;
+    v.roll = Math.atan2(Math.sin(v.roll), Math.cos(v.roll)); // normalise to (-pi, pi]
+    if (Math.abs(v.roll) < 1e-9) v.roll = 0;
+    this.perspCam.updateProjectionMatrix();
+    this.orthoCam.updateProjectionMatrix();
+    this.viewCube.camera.updateProjectionMatrix();
+    this.dispatchEvent(new CustomEvent('viewxform'));
+    this.requestRender();
+  }
+
+  rotateView(deg) {
+    this.setViewTransform({ roll: this.viewXform.roll + THREE.MathUtils.degToRad(deg) });
+  }
+
+  flipView(axis) {
+    // flipping mirrors the sense of rotation, so keep the on-screen roll consistent
+    const v = this.viewXform;
+    if (axis === 'h') this.setViewTransform({ flipH: !v.flipH, roll: -v.roll });
+    else this.setViewTransform({ flipV: !v.flipV, roll: -v.roll });
+  }
+
+  resetViewTransform() {
+    this.setViewTransform({ roll: 0, flipH: false, flipV: false });
+  }
+
+  /** rotates the model itself 90° steps about a world axis through its centre (up-axis correction) */
+  rotateModel(axis, deg) {
+    if (!this.model || this.mode !== '3d') return;
+    const factor = this.explodeFactor;
+    this.setExplode(0);
+    const center = this.visibleBox().getCenter(new THREE.Vector3());
+    const ax = new THREE.Vector3(axis === 'x' ? 1 : 0, axis === 'y' ? 1 : 0, axis === 'z' ? 1 : 0);
+    const q = new THREE.Quaternion().setFromAxisAngle(ax, THREE.MathUtils.degToRad(deg));
+    const m = this.model;
+    m.position.sub(center).applyQuaternion(q).add(center);
+    m.quaternion.premultiply(q);
+    m.updateMatrixWorld(true);
+    m.userData.basePos = m.position.clone();
+    m.userData.baseQuat = m.quaternion.clone();
+    this.computeExplodeDirs();
+    this.setExplode(factor);
+    this.updateSceneBox();
+    this.rebuildGrid();
+    this.updateClipping();
+    this.dispatchEvent(new CustomEvent('transform'));
+    this.requestRender();
   }
 
   dispose() {

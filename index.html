@@ -64,6 +64,34 @@
               <p class="hint">요소를 선택한 뒤 '선택 요소 이동'으로 드래그하여 분리할 수 있습니다. 단일 메쉬(STL 등)는 우클릭 → '연결 요소로 분할'로 요소를 나눌 수 있습니다.</p>
             </div>
           </div>
+          <div class="float-panel hidden" id="viewEditPanel">
+            <div class="fp-head">뷰 편집 <button class="icon-btn" data-close="viewEditPanel" title="닫기"></button></div>
+            <div class="fp-body">
+              <label class="row">화면 회전 <span id="rollVal">0°</span></label>
+              <input type="range" id="rollRange" min="-180" max="180" step="1" value="0" />
+              <div class="row gap">
+                <button class="btn sm" data-ve="ccw" title="반시계 방향 90° ( [ )"></button>
+                <button class="btn sm" data-ve="cw" title="시계 방향 90° ( ] )"></button>
+                <button class="btn sm" data-ve="r180">180°</button>
+              </div>
+              <label class="row">화면 반전</label>
+              <div class="row gap">
+                <button class="btn sm" data-ve="flipH" title="좌우 반전 (Shift+H)"></button>
+                <button class="btn sm" data-ve="flipV" title="상하 반전 (Shift+V)"></button>
+              </div>
+              <div class="row gap"><button class="btn sm" data-ve="reset">뷰 초기화</button></div>
+              <div id="modelOrient">
+                <label class="row" style="margin-top:4px">모델 방향 보정 (90°)</label>
+                <div class="row gap">
+                  <button class="btn sm" data-rot="x">X 축</button>
+                  <button class="btn sm" data-rot="y">Y 축</button>
+                  <button class="btn sm" data-rot="z">Z 축</button>
+                  <button class="btn sm" data-rot="yup" title="Y-up 모델을 Z-up으로 세우기">Y-up → Z-up</button>
+                </div>
+              </div>
+              <p class="hint">화면 회전/반전은 보기에만 적용되며 좌표·측정값은 바뀌지 않습니다. 모델 방향 보정은 모델 자체를 회전합니다.</p>
+            </div>
+          </div>
           <div class="float-panel hidden" id="measurePanel">
             <div class="fp-head">측정 <button class="icon-btn" data-close="measurePanel" title="닫기"></button></div>
             <div class="fp-body">
