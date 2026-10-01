@@ -990,6 +990,9 @@ try {
   if (bg && BGS[bg]) state.bg = bg;
 } catch { /* ignore */ }
 setBackground(state.bg);
+// narrow screens: start with the side panels closed so the viewport is usable
+if (window.innerWidth < 720) togglePanelSide('left');
+if (window.innerWidth < 1000) togglePanelSide('right');
 renderProps();
 updateToolbar();
 

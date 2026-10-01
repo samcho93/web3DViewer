@@ -106,14 +106,15 @@ input, select { font: inherit; }
 
 /* ------------------------------------------------------------ viewport */
 #viewport { position: relative; flex: 1; min-width: 0; overflow: hidden; background: radial-gradient(ellipse at 50% 30%, #3a4658 0%, #232b37 55%, #161b22 100%); }
-#viewport canvas { display: block; outline: none; touch-action: none; }
+/* absolutely positioned so the canvas' pixel size never feeds back into the flex layout */
+#viewport > canvas { position: absolute; top: 0; left: 0; display: block; outline: none; touch-action: none; }
 #viewport.measuring canvas { cursor: crosshair; }
-.label-layer { position: absolute; inset: 0; pointer-events: none; }
+.label-layer { position: absolute; top: 0; left: 0; pointer-events: none; overflow: hidden; }
 .measure-label { background: rgba(20, 24, 31, 0.88); border: 1px solid #ffb020; color: #ffe2a6; padding: 3px 7px; border-radius: 4px; font-size: 12px; white-space: nowrap; text-align: center; transform: translateY(-14px); }
 .measure-label small { display: block; color: #c7b48a; font-size: 10.5px; }
 
 .empty-state { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 3; pointer-events: none; }
-.empty-card { pointer-events: auto; text-align: center; padding: 34px 40px; border: 1.5px dashed #4a5870; border-radius: 14px; background: rgba(18, 22, 28, 0.55); max-width: 560px; color: var(--muted); backdrop-filter: blur(3px); }
+.empty-card { pointer-events: auto; max-height: calc(100% - 32px); overflow: auto; width: calc(100% - 32px); text-align: center; padding: 34px 40px; border: 1.5px dashed #4a5870; border-radius: 14px; background: rgba(18, 22, 28, 0.55); max-width: 560px; color: var(--muted); backdrop-filter: blur(3px); }
 .empty-card svg { color: var(--accent); }
 .empty-card h2 { color: var(--text); font-size: 18px; margin: 12px 0 10px; }
 .empty-card p { margin: 4px 0; font-size: 12px; }
@@ -125,7 +126,7 @@ input, select { font: inherit; }
 .spinner { width: 38px; height: 38px; border: 3px solid rgba(255, 255, 255, 0.15); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.float-panel { position: absolute; left: 12px; top: 12px; z-index: 5; width: 260px; background: rgba(26, 32, 41, 0.95); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 26px rgba(0, 0, 0, 0.4); backdrop-filter: blur(6px); }
+.float-panel { position: absolute; left: 12px; top: 12px; z-index: 5; width: min(260px, calc(100% - 24px)); background: rgba(26, 32, 41, 0.95); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 26px rgba(0, 0, 0, 0.4); backdrop-filter: blur(6px); }
 #explodePanel { top: auto; bottom: 12px; }
 #measurePanel { left: auto; right: 132px; }
 .fp-head { display: flex; align-items: center; justify-content: space-between; padding: 7px 8px 7px 12px; font-weight: 600; border-bottom: 1px solid var(--line); }
@@ -181,12 +182,16 @@ kbd { display: inline-block; padding: 0 5px; border: 1px solid var(--line); bord
 .toast.error { border-color: var(--danger); color: #ffd0d0; }
 
 @media (max-width: 1000px) {
-  .panel.right { display: none; }
+  .panel.right { position: absolute; z-index: 30; top: 46px; bottom: 26px; right: 0; box-shadow: -4px 0 20px rgba(0, 0, 0, 0.5); }
   .file-title { display: none; }
+  #measurePanel { right: 12px; top: 130px; }
 }
 @media (max-width: 720px) {
   .panel.left { position: absolute; z-index: 30; top: 46px; bottom: 26px; left: 0; box-shadow: 4px 0 20px rgba(0, 0, 0, 0.5); }
   .brand span { display: none; }
+  .panel.left, .panel.right { width: min(300px, 86vw); }
+  #statusCoord { min-width: 0; }
+  #statusSel { display: none; }
   .tb-btn .lbl { display: none; }
   .modal-card .content { grid-template-columns: 1fr; }
 }
