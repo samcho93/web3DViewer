@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Web 3D Viewer</title>
+    <meta name="description" content="웹 기반 3D(STEP, IGES, STL, OBJ, glTF ...) / 2D(DWG, DXF) CAD 뷰어" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233d8bff' stroke-width='2' stroke-linejoin='round'%3E%3Cpath d='M12 2l9 5v10l-9 5-9-5V7z'/%3E%3Cpath d='M12 12l9-5M12 12v10M12 12L3 7'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#3d8bff" stroke-width="2" stroke-linejoin="round"><path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M12 12l9-5M12 12v10M12 12L3 7"/></svg>
+          <span>Web 3D Viewer</span>
+        </div>
+        <nav class="toolbar" id="toolbar"></nav>
+        <div class="file-title" id="fileTitle"></div>
+      </header>
+
+      <div class="main">
+        <aside class="panel left" id="leftPanel">
+          <div class="panel-tabs" id="leftTabs">
+            <button data-tab="tree" class="active">모델 트리</button>
+            <button data-tab="layers">레이어</button>
+          </div>
+          <div class="panel-search"><input id="treeSearch" type="search" placeholder="이름 검색..." /></div>
+          <div class="panel-body" id="treeView"></div>
+          <div class="panel-body hidden" id="layerView"></div>
+        </aside>
+
+        <section id="viewport">
+          <div class="empty-state" id="emptyState">
+            <div class="empty-card">
+              <svg viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"><path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M12 12l9-5M12 12v10M12 12L3 7"/></svg>
+              <h2>파일을 끌어다 놓거나 열어주세요</h2>
+              <p>3D: STEP · STP · IGES · IGS · BREP · STL · OBJ(+MTL) · glTF · GLB · FBX · PLY · 3MF · DAE · 3DS · AMF · VRML · VTK · XYZ · PCD</p>
+              <p>2D: DWG · DXF</p>
+              <div class="empty-actions">
+                <button class="btn primary" id="emptyOpen">파일 열기</button>
+                <button class="btn" data-sample="sample-plate.dxf">샘플 DXF</button>
+                <button class="btn" data-sample="sample-assembly.stl">샘플 STL</button>
+              </div>
+            </div>
+          </div>
+          <div class="drop-overlay" id="dropOverlay"><div>여기에 놓으면 열립니다</div></div>
+          <div class="loading hidden" id="loading"><div class="spinner"></div><div id="loadingText">로딩 중...</div></div>
+
+          <!-- floating tool panels -->
+          <div class="float-panel hidden" id="sectionPanel">
+            <div class="fp-head">단면 <button class="icon-btn" data-close="sectionPanel" title="닫기"></button></div>
+            <div class="fp-body" id="sectionBody"></div>
+          </div>
+          <div class="float-panel hidden" id="explodePanel">
+            <div class="fp-head">분해 / 분리 <button class="icon-btn" data-close="explodePanel" title="닫기"></button></div>
+            <div class="fp-body">
+              <label class="row">분해 정도 <span id="explodeVal">0%</span></label>
+              <input type="range" id="explodeRange" min="0" max="200" value="0" />
+              <div class="row gap">
+                <button class="btn sm" id="btnMove">선택 요소 이동</button>
+                <button class="btn sm" id="btnRotate">회전</button>
+                <button class="btn sm" id="btnResetPos">원위치</button>
+              </div>
+              <p class="hint">요소를 선택한 뒤 '선택 요소 이동'으로 드래그하여 분리할 수 있습니다. 단일 메쉬(STL 등)는 우클릭 → '연결 요소로 분할'로 요소를 나눌 수 있습니다.</p>
+            </div>
+          </div>
+          <div class="float-panel hidden" id="measurePanel">
+            <div class="fp-head">측정 <button class="icon-btn" data-close="measurePanel" title="닫기"></button></div>
+            <div class="fp-body">
+              <div class="seg" id="measureModes">
+                <button data-m="distance">거리</button>
+                <button data-m="angle">각도</button>
+                <button data-m="point">좌표</button>
+                <button data-m="area">면적</button>
+              </div>
+              <p class="hint" id="measureHint">측정 방식을 선택하세요.</p>
+              <div class="row gap"><button class="btn sm" id="measureClear">모두 지우기</button></div>
+            </div>
+          </div>
+        </section>
+
+        <aside class="panel right" id="rightPanel">
+          <div class="panel-title">속성</div>
+          <div class="panel-body" id="propsView"></div>
+          <div class="panel-title">측정 결과</div>
+          <div class="panel-body small" id="measureList"><p class="muted">측정 결과가 없습니다.</p></div>
+        </aside>
+      </div>
+
+      <footer class="statusbar">
+        <span id="statusMsg">준비</span>
+        <span class="spacer"></span>
+        <span id="statusSel"></span>
+        <span id="statusCoord"></span>
+      </footer>
+    </div>
+
+    <div class="context-menu hidden" id="contextMenu"></div>
+    <div class="modal hidden" id="helpModal"></div>
+    <input type="file" id="fileInput" multiple hidden />
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
